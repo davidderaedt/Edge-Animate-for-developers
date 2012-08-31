@@ -81,7 +81,7 @@ As a reminder, all Symbol definitions, DOM Elements descriptions, timeline conte
 
 Edge Animate users can create code snippets called *Actions* in response to *Events* or *Triggers*. *Events* can be dispacthed by an element or a symbol (e.g. `click`) or event the document. *Triggers* are dispatched by the timeline when the playhead hits a certain point.
 
-Inside this code, users should use `sym` over `this` to  access the *symbol instance* of the *symbol definition* currently being open in the tool. So it's important to remember that `sym` ** does not represent the currently selected element **.
+Inside this code, users should use `sym` over `this` to  access the *symbol instance* of the *symbol definition* currently being open in the tool. So it's important to remember that `sym` **does not represent the currently selected element**.
 
 For instance, consider an Edge Animate composition open on the stage (which is the default), in which there is an animation. We want users to click on an element named `greenButton` to replay the composition. We select the `greenButton`, and select *Open Actions > click* to open the code editor. In the code displayed, `sym` is the stage, not the image on which users will click to trigger the code.
 
