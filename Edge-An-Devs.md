@@ -77,17 +77,43 @@ As a reminder, all Symbol definitions, DOM Elements descriptions, timeline conte
 
 --------------------------
 
-##Coding Basics
+##Actions scope
 
-Edge Animate users can create code snippets called *Actions* in response to *Events* or *Triggers*. *Events* can be dispacthed by an element or a symbol (e.g. `click`) or event the document. *Triggers* are dispatched by the timeline when the playhead hits a certain point.
+Edge Animate users create code snippets called *Actions* to be executed in response to some events. Events can be dispacthed by an DOM element (e.g. `click`), a symbol (e.g. `creationComplete`). Some events are dispatched by the timeline when the playhead hits a certain point. Those events are called *Triggers*.
 
-Inside this code, users should use `sym` over `this` to  access the *symbol instance* of the *symbol definition* currently being open in the tool. So it's important to remember that `sym` **does not represent the currently selected element**.
+Within those *actions*, users should use `sym` to  access the instance of the currently open *symbol definition*. By default, it is the *Stage*, so when you create a timeline trigger, `sym` is the Stage. If you select an element on the Stage and select "Open Actions" for it, `sym` is still the *Stage*, not the selected element.
 
-For instance, consider an Edge Animate composition open on the stage (which is the default), in which there is an animation. We want users to click on an element named `greenButton` to replay the composition. We select the `greenButton`, and select *Open Actions > click* to open the code editor. In the code displayed, `sym` is the stage, not the image on which users will click to trigger the code.
+> In the main code editor (the one you open with `Ctrl/Cmd+E`), just look at the code navigator on the left: `sym` corresponds to the folder in which the selected item is located.
+
+Consider a composition open on the stage (which is the default), in which there is a simple Text animated from left to right. We want users to click on an element named `greenButton` to replay the composition. We select the `greenButton`, and select *Open Actions > click* to open the code editor. In the code displayed, `sym` is the stage, not the button on which users will click to trigger the code.
 
 	sym.play();
 
-Edge Animate inserts this code into the `[page-name]_edgeActions.js`, but it hides the whole file structure to make it easier to edit for regular users.
+To target a the timeline of a child symbol, you'd use `sym.getSymbol("name");`, which returns a child symbol instance from its name.
+
+Say that on our composition stage, we have an symbol instance named `square`, which  timeline contains a small animation. To play that square animation when clicking a button on the stage, select that button `click` event and type:
+	
+	var square = sym.getSymbol("square");
+	square.play();
+
+Now what if what you want to access is not a simple but the DOM element of a symbol? Then you just use `sym.$("name")` which returns the jQuery handle of a child element from the name.
+
+So, in our previous composition, if we want to access the greenButton (which is a div) and make it disappear, we just write:
+
+	var greenButton = sym.$("greenButton");
+	greenButton.hide();
+
+
+Note that, to get the jQuery handle corresponding to `sym` itself (in our case, the Stage div), you can simply use	`sym.getSymbolElement();`
+
+In both cases, the `name` parameter is the one chosen in the properties panel, **not** the DOM selector. If you want to retrieve the name of the DOM selector from the edge name, you use `sym.lookupSelector(name)`.
+
+
+
+##How Actions are implemented
+
+
+Edge Animate actually inserts actions code into the `[page-name]_edgeActions.js`. It simply hides the global file structure in the tool's code editor to make it easier to edit for regular users.
 
 
 This is what the generated edgeAction file will look like:
@@ -104,72 +130,87 @@ This is what the generated edgeAction file will look like:
       	//Edge binding end
 
 
-You can edit this file directly, either using the tool's "full code editor", or by using another text editor. Here we see that we use the `Symbol` class uses the `bindElementAction` method to register an action on a element. The last parameter is the callback to be executed when the specified event is triggered. It is the body of this callback users will edit using the Edge Animate code editor.
+You can edit this file directly, either using the code editor's "full code" option, or by using an external text editor.
 
-This callback is also passed an `e` parameter representing the event. Using `e.target`, you can access the element which triggered the event (`greenButton`, in our example).
+Here we clearly see that the `Symbol` class uses the `bindElementAction` method to have a callback (5th parameter) executed in response to an event (4th parameter) triggered by an element (3rd parameter). It is the body of this callback users will edit using the Edge Animate code editor.
+
+The callback is passed a first parameter corresponding to the symbol instance who "owns" this action. It's also passed an `e` parameter representing the event. Using `e.target`, you can access the element which triggered the event (`greenButton`, in our example).
+
+As you can guess, the Symbol class also have `bindTriggerAction` and `bindSymbolAction` methods, which work exactly the same way for a timeline event and a symbol event, respectively.
+
+It is now clear that each action is declared in a separate function closure. As a consequence, you cannot create a local function or variable in a symbol action and expect to access it elsewhere. It has to belong to the corresponding symbol.
+
+If you want a variable or function to be accessible from all actions of a given symbol, you can simply declare it at the top of the "Edge Symbol" closure:
+
+	   //Edge symbol: 'stage'
+	   (function(symbolName) {
+	   
+			function randomColor () {
+				var c = Math.floor(Math.random()*(0xFFFFFF+1))
+				return '#' + c.toString(16);
+			}
+		…
+		
+If you use the tools' editor, you can access it simply by selecting the corresponding symbol in the code editor. 
+
+However, you don't have a reference to the symbol instance `sym`. An alternative could be to define the function as a member of this object at the moment of its creation. It turns out we have a creationComplete event we could use in that case.
+
 
 Technically, only symbols can have javascript code attached to them, but this code can access and manipulate any other symbol or DOM elements, using a dedicated API.
 
 --------------------------
 
-##Traversing the object tree
+##Traversing the symbol tree
 
-Since those are two completely different objects, we access symbols and elements differently. But you can access any symbol instance or any element from anywhere using the appropriate API.
+We've already seen how to get a child symbol using `sym.getSymbol("name");`. We can also access an array of all child symbol instances using:
 
-`sym.getSymbol("name");` returns a child symbol instance from its name
-	
-	var square = sym.getSymbol("square");
-	square.play();
+	var children = sym.getChildSymbols();
 
-
-`sym.$("name")` returns the jQuery handle of a child element from the name.
-
-	var greenButton = sym.$("greenButton");
-	greenButton.hide();
-
-Note that, to get the jQuery handle corresponding to `sym` itself, you can simply use	`sym.getSymbolElement();`
-
-In both cases, the `name` parameter is the one chosen in the properties panel, **not** the DOM selector. If you want to retrieve the name of the DOM selector from the edge name, you use `sym.lookupSelector(name)`.
-
-You can get an array of all child symbol instances like this:
-
-	sym.getChildSymbols();
-
-To get an array of all child DOM elements, you'd use the jQuery method `children()` on the corresponding element:
-
-	sym.getSymbolElement().children();
-
-You can move up the symbol tree to get to the parent symbol.
+Conversly, you can go up the symbol tree to get to the parent symbol.
 
 	sym.getParentSymbol();
 
-
-To get to the root of the tree (ie the stage), you first get the composition with ` sym.getComposition()` and then call `getStage()`. You can then descend the object tree:
+To get to the root of the tree (ie the stage), you first get the composition with ` sym.getComposition()` and then call `getStage()`. You can then go down the symbol tree. This is an example of an absolute path to a symbol, which will then work from anywhere in your project:
 
 	sym.getComposition().getStage().getSymbol("leftContainer").getSymbol("square").play(); 
 
 
-##Dynamic symbols manipulation
+Finally, note that the composition object can return the list of all instances of a given symbol definition, using `getSymbols(definitionName);`
 
-You can create or delete symbols dynamically.
+	var allSquares = sym.getComposition().getSymbols("Square");
+
+Now what about DOM elements? We've seen how to get a DOM element from using `sym.$("name")`, however there are times when you want to access a DOM element from another element. In that case, you simply use the jQuery API.
+
+As a reminder, to get an array of all child DOM elements, you'd use the jQuery method `children()` on the corresponding element:
+
+	sym.getSymbolElement().children();
+
+You also have a `parent()` method to access the parent element, and a whole lot of other methods, but for the rest, the best is to check the [official jQuery documentation](http://docs.jquery.com/Main_Page).
+
+
+
+##Dynamic symbol manipulation
+
+You can of course create or delete symbols dynamically.
 
 To create a new Symbol instance anywhere, you use:
 
 	var instance = sym.createChildSymbol("SymbolDefinitionName", "parentSymbolInstanceName", index) ;
 
-But the second parameter can be a jQuery-like selector, so that you can use things like:
+For some reason, an equivalent method is also available at the composition level:
+
+	var instance = sym.getComposition().createSymbolChild("SymbolDef", "parentSym", index");
+
+Interestingly this methods both instanciates the object and inserts the corresponding DOM element at the same time.
+
+Also, the second parameter can be a jQuery-like selector, so that you can use things like:
 
 	sym.createChildSymbol("SymbolDefinitionName", "body > div") ;
+
+
+Using these methods, you could easily use a loop to instanciate and dynamically place symbol elements.
 
 Likewise, you can dynamically delete symbol instances:
 
 	sym.getSymbol("square2").deleteSymbol();
-
-
-Note that the composition object return the list of all instances of a given symbol definition, using `getSymbols(definitionName);`
-
-	var allSquares = sym.getComposition().getSymbols("Square");
-
-
-
 
